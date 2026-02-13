@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -15,9 +14,9 @@
             overflow-x: hidden;
         }
     </style>
-    <!-- Shim for process.env -->
+    <!-- Shim for process.env and global error handling -->
     <script>
-        window.process = window.process || { env: {} };
+        window.process = { env: { API_KEY: "" } };
     </script>
     <script type="importmap">
 {
@@ -36,8 +35,6 @@
 </head>
 <body>
     <div id="root"></div>
-    <!-- سنقوم باستخدام الامتداد .tsx وإذا كانت المنصة تدعم التحويل التلقائي فستعمل، 
-         وإلا يفضل التأكد من وجود build step -->
     <script type="module" src="index.tsx"></script>
 </body>
 </html>

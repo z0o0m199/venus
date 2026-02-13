@@ -35,6 +35,7 @@ import {
   TrendingUp,
   Users,
   Eye,
+  EyeOff,
   Edit,
   CheckCircle2,
   Clock,
@@ -48,7 +49,7 @@ import {
 } from 'lucide-react';
 
 // --- Safe process.env access ---
-const API_KEY = process.env.API_KEY || "";
+const API_KEY = (window as any).process?.env?.API_KEY || "";
 
 // --- Supabase Config ---
 const SUPABASE_URL = 'https://ouxeprjiogwckzxcdcnd.supabase.co';
@@ -154,6 +155,7 @@ const App = () => {
   const [password, setPassword] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // AI States
   const [aiInput, setAiInput] = useState("");
@@ -229,22 +231,24 @@ const App = () => {
         });
         if (error) throw error;
         if (data.user && !data.session) {
-           alert("تم إنشاء الحساب! يرجى تأكيد بريدك الإلكتروني للدخول.");
+           alert("تم إنشاء الحساب بنجاح! يرجى تأكيد بريدك الإلكتروني للدخول.");
         } else if (data.session) {
            updateUserState(data.user);
+           setIsMenuOpen(false);
            setUserName(''); setPhoneNumber(''); setEmail(''); setPassword('');
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        if (data.session) {
+        if (data.user) {
           updateUserState(data.user);
+          setIsMenuOpen(false);
           setEmail(''); setPassword('');
         }
       }
     } catch (error: any) { 
       console.error("Auth error:", error);
-      alert("خطأ: " + (error.message || "فشل العملية")); 
+      alert("خطأ: " + (error.message || "يرجى التأكد من البريد وكلمة المرور")); 
     } finally { 
       setLoginLoading(false); 
     }
@@ -255,13 +259,20 @@ const App = () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { 
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          }
+        }
       });
       if (error) throw error;
     } catch (error: any) {
-      alert("خطأ في تسجيل دخول Google: " + error.message);
+      console.error("Google auth error:", error);
+      alert("فشل تسجيل الدخول عبر جوجل. يرجى التأكد من اتصال الإنترنت.");
     } finally {
-      setLoginLoading(false);
+      // لا نحتاج لتعطيل الـ loading هنا لأن الصفحة ستنتقل
     }
   };
 
@@ -280,9 +291,9 @@ const App = () => {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const { data: p, error: pError } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-      const { data: ads, error: adsError } = await supabase.from('carousel').select('*');
-      const { data: ord, error: ordError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      const { data: p } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+      const { data: ads } = await supabase.from('carousel').select('*');
+      const { data: ord } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       
       if (p) setProducts(p);
       if (ads) setCarouselItems(ads);
@@ -363,8 +374,8 @@ const App = () => {
     setAiInput("");
     setAiChat(prev => [...prev, { role: 'user', text: userMsg }]);
     try {
-      const genAI = new GoogleGenAI({ apiKey: API_KEY });
-      const response = await genAI.models.generateContent({
+      const aiClient = new GoogleGenAI({ apiKey: API_KEY });
+      const response = await aiClient.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `خبير تجميل في فينس. هويتنا هي الزهري بالكامل. أجب بالعربية: ${userMsg}`,
       });
@@ -806,10 +817,37 @@ const App = () => {
               {!currentUser ? (
                 <div className={`p-6 rounded-[2.5rem] space-y-4 border animate-fade-in ${isDark ? 'bg-pink-900/20 border-pink-900/50' : 'bg-pink-50/30 border-pink-100 shadow-sm'}`}>
                    <span className={`text-xs font-black block mb-2 ${isDark ? 'text-pink-400' : 'text-pink-400'}`}>{isSignUp ? "انضمي لعالم فينس الوردي" : "أهلاً بعودتكِ"}</span>
-                   {isSignUp && <input className={`dev-input ${isDark ? 'dark-input' : ''}`} placeholder="الاسم" value={userName} onChange={e => setUserName(e.target.value)} />}
-                   <input className={`dev-input ${isDark ? 'dark-input' : ''}`} placeholder="البريد الإلكتروني" value={email} onChange={e => setEmail(e.target.value)} />
-                   <input className={`dev-input ${isDark ? 'dark-input' : ''}`} type="password" placeholder="كلمة المرور" value={password} onChange={e => setPassword(e.target.value)} />
-                   {isSignUp && <input className={`dev-input ${isDark ? 'dark-input' : ''}`} placeholder="رقم الهاتف" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />}
+                   {isSignUp && <input className={`dev-input ${isDark ? 'dark-input' : ''}`} placeholder="الاسم الكامل" value={userName} onChange={e => setUserName(e.target.value)} />}
+                   <input className={`dev-input ${isDark ? 'dark-input' : ''}`} type="email" placeholder="البريد الإلكتروني" value={email} onChange={e => setEmail(e.target.value)} />
+                   
+                   <div className="relative">
+                     <input 
+                       className={`dev-input pr-12 ${isDark ? 'dark-input' : ''}`} 
+                       type={showPassword ? "text" : "password"} 
+                       placeholder="كلمة المرور" 
+                       value={password} 
+                       onChange={e => setPassword(e.target.value)} 
+                     />
+                     <button 
+                       type="button"
+                       onClick={() => setShowPassword(!showPassword)}
+                       className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-300 hover:text-pink-500 transition-colors"
+                     >
+                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                     </button>
+                   </div>
+
+                   {isSignUp && (
+                     <input 
+                       className={`dev-input ${isDark ? 'dark-input' : ''}`} 
+                       type="tel" 
+                       inputMode="numeric"
+                       pattern="[0-9]*"
+                       placeholder="رقم الهاتف" 
+                       value={phoneNumber} 
+                       onChange={e => setPhoneNumber(e.target.value.replace(/[^0-9]/g, ''))} 
+                     />
+                   )}
                    
                    <button onClick={handleEmailAuth} className="dev-submit-btn shadow-lg active:scale-95 transition-all mt-4">
                       {loginLoading ? <Loader2 className="animate-spin mx-auto" size={20}/> : (isSignUp ? "إنشاء حساب" : "تسجيل الدخول")}
@@ -822,7 +860,7 @@ const App = () => {
                      </button>
                    )}
 
-                   <button onClick={() => setIsSignUp(!isSignUp)} className={`w-full text-xs font-black text-center mt-4 ${isDark ? 'text-pink-400' : 'text-pink-500'} hover:underline`}>
+                   <button onClick={() => { setIsSignUp(!isSignUp); setShowPassword(false); }} className={`w-full text-xs font-black text-center mt-4 ${isDark ? 'text-pink-400' : 'text-pink-500'} hover:underline`}>
                       {isSignUp ? "لديكِ حساب بالفعل؟ تفضلي بالدخول" : "جديدة هنا؟ انضمي إلينا الآن"}
                    </button>
                 </div>
@@ -925,7 +963,7 @@ const App = () => {
               </div>
               <div className="space-y-4">
                 <input className={`dev-input ${isDark ? 'dark-input' : ''}`} placeholder="اسم المستلم الثلاثي" value={checkoutForm.name} onChange={e => setCheckoutForm({...checkoutForm, name: e.target.value})} />
-                <input className={`dev-input ${isDark ? 'dark-input' : ''}`} placeholder="رقم الهاتف (للتمكن من التواصل)" value={checkoutForm.phone} onChange={e => setCheckoutForm({...checkoutForm, phone: e.target.value})} />
+                <input className={`dev-input ${isDark ? 'dark-input' : ''}`} type="tel" inputMode="numeric" pattern="[0-9]*" placeholder="رقم الهاتف" value={checkoutForm.phone} onChange={e => setCheckoutForm({...checkoutForm, phone: e.target.value.replace(/[^0-9]/g, '')})} />
                 <textarea className={`dev-input h-32 resize-none ${isDark ? 'dark-input' : ''}`} placeholder="العنوان: المحافظة، الحي، أقرب نقطة دالة..." value={checkoutForm.address} onChange={e => setCheckoutForm({...checkoutForm, address: e.target.value})} />
               </div>
               <div className="p-4 rounded-2xl bg-pink-50 border border-pink-100 flex items-center gap-3 text-pink-600">
