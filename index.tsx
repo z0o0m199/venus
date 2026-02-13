@@ -47,13 +47,13 @@ import {
   DollarSign
 } from 'lucide-react';
 
+// --- Safe process.env access ---
+const API_KEY = process.env.API_KEY || "";
+
 // --- Supabase Config ---
 const SUPABASE_URL = 'https://ouxeprjiogwckzxcdcnd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91eGVwcmppb2d3Y2t6eGNkY25kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDYzMDYsImV4cCI6MjA4NjQ4MjMwNn0.yrlKPnM3uxkSNjnLLkN6L3JO5NZSxkm94mS9hnBZgwo';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// --- Gemini AI Config ---
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const WHATSAPP_NUMBER = "9647710092101"; 
 const DELIVERY_FEE = 5000;
@@ -169,8 +169,12 @@ const App = () => {
     fetchInitialData();
 
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) updateUserState(session.user);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) updateUserState(session.user);
+      } catch (err) {
+        console.error("Auth init error:", err);
+      }
     };
     initAuth();
 
@@ -196,10 +200,10 @@ const App = () => {
   const updateUserState = (user: any) => {
     if (user) {
       setCurrentUser({
-        name: user.user_metadata.full_name || user.email?.split('@')[0] || "مستخدمة فينس",
+        name: user.user_metadata?.full_name || user.email?.split('@')[0] || "مستخدمة فينس",
         email: user.email,
-        phone: user.user_metadata.phone_number || "",
-        avatar: user.user_metadata.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
+        phone: user.user_metadata?.phone_number || "",
+        avatar: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
         isAdmin: user.email === 'abswking@gmail.com' || user.email?.includes('admin')
       });
     } else {
@@ -262,8 +266,12 @@ const App = () => {
   };
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) alert(error.message);
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) alert(error.message);
+    } catch (e) {
+        console.error(e);
+    }
     setCurrentUser(null);
     setIsMenuOpen(false);
     setActiveTab('home');
@@ -272,14 +280,18 @@ const App = () => {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const { data: p } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-      const { data: ads } = await supabase.from('carousel').select('*');
-      const { data: ord } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      const { data: p, error: pError } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+      const { data: ads, error: adsError } = await supabase.from('carousel').select('*');
+      const { data: ord, error: ordError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      
       if (p) setProducts(p);
       if (ads) setCarouselItems(ads);
       if (ord) setOrders(ord);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) { 
+      console.error("Data fetch error:", e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const deleteProduct = async (id: number) => {
@@ -351,23 +363,28 @@ const App = () => {
     setAiInput("");
     setAiChat(prev => [...prev, { role: 'user', text: userMsg }]);
     try {
-      const response = await ai.models.generateContent({
+      const genAI = new GoogleGenAI({ apiKey: API_KEY });
+      const response = await genAI.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `خبير تجميل في فينس. هويتنا هي الزهري بالكامل. أجب بالعربية: ${userMsg}`,
       });
       setAiChat(prev => [...prev, { role: 'model', text: response.text || "عذراً، لم أفهم." }]);
-    } catch (e) { setAiChat(prev => [...prev, { role: 'model', text: "خطأ في الاتصال." }]); }
-    finally { setAiLoading(false); }
+    } catch (e) { 
+        console.error(e);
+        setAiChat(prev => [...prev, { role: 'model', text: "خطأ في الاتصال بخبير التجميل." }]); 
+    } finally { 
+        setAiLoading(false); 
+    }
   };
 
   // Filtered Lists for Admin
   const filteredOrders = useMemo(() => orders.filter(o => 
-    o.customer_name.toLowerCase().includes(orderSearch.toLowerCase()) || 
-    o.customer_phone.includes(orderSearch)
+    (o.customer_name || "").toLowerCase().includes(orderSearch.toLowerCase()) || 
+    (o.customer_phone || "").includes(orderSearch)
   ), [orders, orderSearch]);
 
   const filteredProductsList = useMemo(() => products.filter(p => 
-    p.name.toLowerCase().includes(productSearch.toLowerCase())
+    (p.name || "").toLowerCase().includes(productSearch.toLowerCase())
   ), [products, productSearch]);
 
   return (

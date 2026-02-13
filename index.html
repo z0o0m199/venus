@@ -12,9 +12,14 @@
             font-family: 'Almarai', sans-serif;
             background-color: #FDF7F2;
             margin: 0;
+            overflow-x: hidden;
         }
     </style>
-<script type="importmap">
+    <!-- Shim for process.env -->
+    <script>
+        window.process = window.process || { env: {} };
+    </script>
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@19.0.0",
@@ -31,6 +36,8 @@
 </head>
 <body>
     <div id="root"></div>
+    <!-- سنقوم باستخدام الامتداد .tsx وإذا كانت المنصة تدعم التحويل التلقائي فستعمل، 
+         وإلا يفضل التأكد من وجود build step -->
     <script type="module" src="index.tsx"></script>
 </body>
 </html>
